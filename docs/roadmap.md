@@ -101,7 +101,26 @@
 
 ---
 
-## Fase 6.6 — Pipeline y acciones de estado
+## Fase 6.6 — POST /api/v1/leads ✓
+
+**Objetivo:** Primer endpoint real — creación de leads con idempotencia.
+
+- [x] `POST /api/v1/leads` protegido con auth:sanctum + set.tenant.context
+- [x] `CreateLeadRequest` — validación completa del payload
+- [x] Resolución de `source_system`/`source_channel` desde cliente o payload
+- [x] Idempotencia nivel 1: `Idempotency-Key` header → replay 200 + `Idempotent-Replayed: true`
+- [x] Idempotencia nivel 2: unicidad por datos `(tenant_id, source_system, external_reference_id)` → 409
+- [x] Race condition manejada con `UniqueConstraintViolationException`
+- [x] `CreateLeadAction` — crea Lead + LeadActivityLog en una sola transacción
+- [x] `IdempotencyService` — hash de request + store/lookup de registros
+- [x] `LeadResource` — respuesta estructurada según contratos
+- [x] Activity log `lead_created` con source/channel/external_reference_id
+- [x] Tests: 15 tests (auth, validación, source, idempotencia, activity log)
+- [x] Respuesta 201 con `request_id` + `idempotent_replay: false`
+
+---
+
+## Fase 6.7 — Pipeline y acciones de estado
 
 **Objetivo:** Implementar el flujo comercial del lead.
 
