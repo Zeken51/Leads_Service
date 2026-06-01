@@ -56,23 +56,20 @@
 
 ---
 
-## Fase 6.4 — Implementación del dominio base
+## Fase 6.4 — Implementación del dominio base ✓
 
 **Objetivo:** Crear la estructura de carpetas, modelos y migraciones principales.
 
-- [ ] Crear estructura de carpetas: `app/Domain/`, `app/Services/`, `app/DTOs/`, `app/Actions/`
-- [ ] Crear trait `HasTenant` + Global Scope de tenant
-- [ ] Migración: `pipeline_stages`
-- [ ] Migración: `leads` (todos los campos del dominio)
-- [ ] Migración: `lead_notes`
-- [ ] Migración: `lead_activity_logs` (con campo `contact_channel`)
-- [ ] Migración: `idempotency_keys`
-- [ ] Modelo `Lead` + `HasTenant`
-- [ ] Modelo `PipelineStage`
-- [ ] Modelo `LeadNote`
-- [ ] Modelo `LeadActivityLog`
-- [ ] Modelo `IdempotencyKey`
-- [ ] Seeders con dos tenants y datos de prueba
+- [x] Estructura de carpetas `app/Domain/` creada
+- [x] `TenantContext`, `TenantScope` y trait `HasTenant` implementados
+- [x] Enums: `LeadStatus`, `LeadPriority`, `LeadEvent`, `CauserType`, `ContactChannel`
+- [x] Migración + Modelo `PipelineStage`
+- [x] Migración + Modelo `Lead` (todos los campos del dominio, índices, soft delete)
+- [x] Migración + Modelo `LeadNote`
+- [x] Migración + Modelo `LeadActivityLog` (inmutable, sin `updated_at`)
+- [x] Migración + Modelo `IdempotencyKey` (con `request_hash` y `lead_id`)
+- [x] Migraciones ejecutadas y verificadas en base de datos
+- [ ] Seeders con dos tenants, pipeline stages y leads de prueba
 
 ---
 
