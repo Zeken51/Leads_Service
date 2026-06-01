@@ -440,12 +440,20 @@ Mueve el lead a otra etapa del pipeline.
 
 **`lost_reason` obligatorio** cuando el stage es terminal de tipo `lost`.
 
-**Comportamiento automático:**
-- Si el stage es terminal de tipo `won`: `status=won`, `won_at=now()`
-- Si el stage es terminal de tipo `lost`: `status=lost`, `lost_at=now()`
-- Activity log registrado automáticamente: `stage_changed`
+**`next_action` y `followup_at`:** Solo válidos para stages **no terminales**. Si se envían hacia un stage terminal (won/lost), el servidor retorna `422` — no los ignora silenciosamente.
 
-**Errores:** `422` si el lead está cerrado (`status=won/lost`), `422` si el stage no pertenece al tenant.
+**Comportamiento automático:**
+- Stage no terminal: `stage_id` actualizado; `next_action`/`followup_at` opcionales
+- Stage terminal won: `status=won`, `won_at=now()`, activity log `stage_changed` + `lead_won`
+- Stage terminal lost: `status=lost`, `lost_at=now()`, `lost_reason` requerido, activity log `stage_changed` + `lead_lost`
+
+> **Recomendación:** Usar `PATCH /won` o `PATCH /lost` para cerrar leads cuando no es necesaria la navegación explícita por etapas del pipeline (por ejemplo, tenants sin pipeline configurado o cierres directos desde un panel). `PATCH /stage` con stage terminal es el flujo natural cuando el agente navega por las etapas del pipeline.
+
+**Errores:**
+- `422` si el lead está cerrado (`status=won/lost`)
+- `422` si el stage no pertenece al tenant
+- `422` si el stage es terminal y se envían `next_action` o `followup_at`
+- `422` si el stage es terminal `lost` y falta `lost_reason`
 
 **Response 200:** lead actualizado.
 
@@ -485,7 +493,9 @@ Programa la próxima acción y fecha de seguimiento.
 }
 ```
 
-**Campos obligatorios:** al menos uno de los dos (`next_action` o `followup_at`).
+**Campos obligatorios:** al menos uno de los dos (`next_action` o `followup_at`). Si se envía `followup_at`, `next_action` también es obligatorio (no tiene sentido agendar una fecha sin describir la acción).
+
+**Restricción:** Bloqueado si el lead está en estado `won` o `lost` (422).
 
 **Response 200:** lead actualizado.
 
@@ -665,9 +675,9 @@ Lista todas las notas del lead en orden cronológico inverso.
 
 ### POST /api/v1/leads/{id}/notes
 
-Agrega una nota al lead. Actualiza `last_contact_at` del lead.
+Agrega una nota al lead.
 
-> **Por qué las notas actualizan `last_contact_at`:** en este dominio, agregar una nota es siempre una señal de actividad comercial activa sobre el lead. `last_contact_at` representa la última vez que hubo actividad sobre el lead, no exclusivamente una conversación directa con el cliente. Para registrar un contacto con canal explícito (phone, whatsapp, etc.), usar `POST /contact`. Ver `docs/technical-notes.md` nota #39.
+> **Decisión fase 6.8:** Las notas **NO** actualizan `last_contact_at`. Una nota es un registro interno del agente; puede ser una observación, un recordatorio o información adicional que no implica necesariamente contacto con el cliente. Para registrar un contacto real (con canal explícito), usar `POST /contact`. Ver `docs/technical-notes.md` nota #41.
 
 **Request:**
 ```json

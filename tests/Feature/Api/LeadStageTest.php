@@ -98,16 +98,18 @@ class LeadStageTest extends LeadApiTestCase
         ]);
     }
 
-    public function test_stage_change_updates_last_contact_at(): void
+    public function test_stage_change_does_not_update_last_contact_at(): void
     {
+        // Cambiar stage es gestión del pipeline, no un contacto con el cliente.
+        // last_contact_at solo se actualiza en /contact.
         $token    = $this->tokenForUser();
-        $lead     = $this->createLead(self::TENANT_A);
+        $lead     = $this->createLead(self::TENANT_A, ['last_contact_at' => null]);
         $newStage = $this->createStage(self::TENANT_A);
 
         $this->patchStage($token, $lead->id, ['stage_id' => $newStage->id])
             ->assertOk();
 
-        $this->assertNotNull($lead->fresh()->last_contact_at);
+        $this->assertNull($lead->fresh()->last_contact_at);
     }
 
     public function test_stage_change_accepts_next_action_and_followup(): void

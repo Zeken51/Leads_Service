@@ -25,8 +25,8 @@ class CreateLeadNoteAction
                 'author_name_snapshot' => $authorName,
             ]);
 
-            $lead->update(['last_contact_at' => now()]);
-
+            // Las notas son registros internos de actividad del agente.
+            // last_contact_at solo se actualiza en /contact (señal explícita de contacto real).
             LeadActivityLog::create(array_merge([
                 'lead_id'     => $lead->id,
                 'tenant_id'   => $lead->tenant_id,

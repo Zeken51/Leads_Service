@@ -144,16 +144,18 @@ class LeadNotesTest extends LeadApiTestCase
         ]);
     }
 
-    public function test_create_note_updates_lead_last_contact_at(): void
+    public function test_create_note_does_not_update_last_contact_at(): void
     {
+        // Las notas son registros internos del agente, no señales de contacto real.
+        // Para registrar contacto con el cliente, usar POST /contact.
         $token = $this->tokenForUser();
-        $lead  = $this->createLead(self::TENANT_A);
+        $lead  = $this->createLead(self::TENANT_A, ['last_contact_at' => null]);
 
         $this->withToken($token)
             ->postJson("/api/v1/leads/{$lead->id}/notes", ['content' => 'Nota de seguimiento'])
             ->assertCreated();
 
-        $this->assertNotNull($lead->fresh()->last_contact_at);
+        $this->assertNull($lead->fresh()->last_contact_at);
     }
 
     public function test_create_note_creates_activity_log(): void

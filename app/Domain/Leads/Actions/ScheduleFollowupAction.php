@@ -7,11 +7,18 @@ use App\Domain\Leads\Models\Lead;
 use App\Domain\Leads\Models\LeadActivityLog;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ScheduleFollowupAction
 {
     public function execute(Lead $lead, array $data, array $causer): Lead
     {
+        if ($lead->isClosed()) {
+            throw ValidationException::withMessages([
+                'status' => ["Cannot schedule follow-up on a closed lead (status: {$lead->status->value})."],
+            ]);
+        }
+
         return DB::transaction(function () use ($lead, $data, $causer) {
             $updates = [];
 

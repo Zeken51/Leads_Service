@@ -51,20 +51,36 @@ class UpdateLeadStageAction
             }
         }
 
+        // next_action y followup_at son incompatibles con stages terminales.
+        // Un lead cerrado (won/lost) no tiene próximas acciones pendientes.
+        // Ignorarlos silenciosamente confundiría al cliente que pensaría que se guardaron.
+        if ($stage->is_terminal) {
+            $errors = [];
+            if (isset($data['next_action']) && $data['next_action'] !== null) {
+                $errors['next_action'] = ['Cannot set next_action when moving to a terminal stage (won/lost). Close the lead via /stage with only stage_id, or use /won or /lost directly.'];
+            }
+            if (isset($data['followup_at']) && $data['followup_at'] !== null) {
+                $errors['followup_at'] = ['Cannot set followup_at when moving to a terminal stage (won/lost). Terminal leads cannot have pending follow-up dates.'];
+            }
+            if ($errors) {
+                throw ValidationException::withMessages($errors);
+            }
+        }
+
         return DB::transaction(function () use ($lead, $data, $causer, $stage) {
             $previousStageId   = $lead->stage_id;
             $previousStageName = optional($lead->stage)->name ?? 'Sin etapa';
 
-            $updates = [
-                'stage_id'       => $stage->id,
-                'last_contact_at' => now(),
-            ];
+            $updates = ['stage_id' => $stage->id];
 
-            if (array_key_exists('next_action', $data) && $data['next_action'] !== null) {
-                $updates['next_action'] = $data['next_action'];
-            }
-            if (array_key_exists('followup_at', $data) && $data['followup_at'] !== null) {
-                $updates['followup_at'] = Carbon::parse($data['followup_at']);
+            // next_action y followup_at solo en stages no terminales (ya validado arriba)
+            if (! $stage->is_terminal) {
+                if (array_key_exists('next_action', $data) && $data['next_action'] !== null) {
+                    $updates['next_action'] = $data['next_action'];
+                }
+                if (array_key_exists('followup_at', $data) && $data['followup_at'] !== null) {
+                    $updates['followup_at'] = Carbon::parse($data['followup_at']);
+                }
             }
 
             // Transiciones de estado para stages terminales

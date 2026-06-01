@@ -25,6 +25,12 @@ class ScheduleFollowupRequest extends FormRequest
             if (! $this->filled('next_action') && ! $this->filled('followup_at')) {
                 $v->errors()->add('next_action', 'At least one of next_action or followup_at is required.');
             }
+
+            // Si se agenda una fecha de seguimiento, next_action es obligatorio
+            // (no tiene sentido agendar una fecha sin describir qué se va a hacer)
+            if ($this->filled('followup_at') && ! $this->filled('next_action')) {
+                $v->errors()->add('next_action', 'next_action is required when scheduling a follow-up date.');
+            }
         });
     }
 }
