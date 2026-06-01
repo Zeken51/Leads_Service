@@ -1,6 +1,6 @@
 # Autenticación API — leads-service
 
-> Fase 6.3 — Documento de referencia. Sin implementación todavía.
+> Actualizado en fase 6.5 — Implementación base completada.
 
 ---
 
@@ -74,8 +74,11 @@ Idempotency-Key: {uuid}         ← recomendado en POST/PATCH
 Cada token está asociado a exactamente **un tenant**. El `tenant_id` se extrae del token automáticamente por el middleware. El cliente **nunca debe enviar `tenant_id` en el body ni en query params**: es un campo derivado del token.
 
 ```
-Token ──→ User ──→ tenant_id (vinculado al crear el token)
+Token ──→ User (tenant_id en users.tenant_id)
+Token ──→ TenantApiClient (tenant_id en tenant_api_clients.tenant_id)
 ```
+
+`SetTenantContext` middleware detecta cuál de los dos es el autenticado y extrae el `tenant_id` correspondiente. El `RequestContext` encapsula tenant_id, source_system, source_channel y abilities del token.
 
 Si un sistema externo (ej: ZendVacations) necesita enviar leads de múltiples tenants, debe obtener un token distinto por tenant.
 
@@ -124,6 +127,17 @@ Authorization: Bearer {token}
 ```
 
 ---
+
+## Diferencia entre `User` y `TenantApiClient`
+
+| Tipo | Propósito | Login endpoint | Ciclo de vida del token |
+|---|---|---|---|
+| `User` | Agentes humanos del panel interno | `POST /api/v1/auth/login` | Corto/medio plazo, revocado en logout |
+| `TenantApiClient` | Sistemas externos (ZendVacations, web forms) | No tiene — token creado por admin | Largo plazo, renovación manual |
+
+Los tokens de `TenantApiClient` llevan `source_system` y `source_channel` en el contexto. Los tokens de `User` no tienen source_system predefinido.
+
+Un `TenantApiClient` con `is_active = false` recibe 403 en todas las rutas de negocio. Un `User` sin `tenant_id` recibe 403 también.
 
 ## Sesión web (panel interno)
 
