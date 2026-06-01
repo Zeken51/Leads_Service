@@ -13,24 +13,35 @@
 | Auth API | Laravel Sanctum | ^4.0 |
 | HTTP client | Axios | incluido en Breeze |
 
+---
+
+## Principio de independencia
+
+Este microservicio **no depende de ningún otro repositorio**. No accede a bases
+de datos externas ni importa código de otros proyectos. Se comunica con sistemas
+externos únicamente a través de sus propios endpoints API (contrato de entrada)
+o de webhooks (contrato de salida, en fases futuras).
+
+---
+
 ## Capas de la aplicación
 
 ```
 leads-service/
 ├── app/
-│   ├── Domain/              ← lógica de negocio por módulo (propuesta)
-│   │   ├── Leads/
-│   │   ├── Pipeline/
-│   │   └── Organizations/
-│   ├── Services/            ← servicios de aplicación (orquestadores)
-│   ├── DTOs/                ← objetos de transferencia de datos
+│   ├── Domain/              ← lógica de negocio por módulo
+│   │   ├── Leads/           ← entidad Lead, reglas, eventos
+│   │   ├── Pipeline/        ← PipelineStage, reglas de transición
+│   │   └── Tenants/         ← scoping multi-tenant
+│   ├── Services/            ← orquestadores de casos de uso
+│   ├── DTOs/                ← objetos de transferencia de datos (agnósticos al ORM)
 │   ├── Actions/             ← acciones atómicas (un caso de uso = una clase)
 │   ├── Http/
 │   │   ├── Controllers/
 │   │   │   ├── Auth/        ← controladores Breeze (web)
-│   │   │   └── Api/         ← controladores API (pendiente)
-│   │   ├── Middleware/
-│   │   └── Requests/
+│   │   │   └── Api/V1/      ← controladores API versionados
+│   │   ├── Middleware/      ← tenant scope, idempotencia, rate limit
+│   │   └── Requests/        ← Form Requests por endpoint
 │   ├── Models/              ← modelos Eloquent
 │   └── Providers/
 ├── resources/
@@ -41,8 +52,64 @@ leads-service/
 ├── routes/
 │   ├── web.php              ← rutas Inertia autenticadas
 │   ├── auth.php             ← rutas de autenticación web
-│   └── api.php              ← rutas API (pendiente)
+│   └── api.php              ← rutas API v1
 └── docs/                    ← documentación del proyecto
+```
+
+---
+
+## Clientes externos
+
+```
+┌──────────────────┐     POST /api/v1/leads      ┌─────────────────────┐
+│  ZendVacations   │ ──────────────────────────→ │                     │
+│ (source_system:  │     Bearer token             │   leads-service     │
+│  zend_vacations) │                              │                     │
+└──────────────────┘                              │  ┌───────────────┐  │
+                                                  │  │ API v1        │  │
+┌──────────────────┐     POST /api/v1/leads       │  │ /api/v1/...   │  │
+│   Web Forms /    │ ──────────────────────────→ │  └───────────────┘  │
+│  otros sistemas  │     Bearer token             │                     │
+│ (source_system:  │                              │  ┌───────────────┐  │
+│   web_form)      │                              │  │ Panel Inertia │  │
+└──────────────────┘                              │  │ (interno)     │  │
+                                                  │  └───────────────┘  │
+┌──────────────────┐    GET/PATCH /api/v1/leads   │                     │
+│  Agentes via     │ ──────────────────────────→ └─────────────────────┘
+│  Panel interno   │     Session (Breeze)
+└──────────────────┘
+```
+
+---
+
+## Flujo de petición API
+
+```
+Cliente externo
+    │
+    │ POST /api/v1/leads
+    │ Authorization: Bearer {token}
+    │ Idempotency-Key: {uuid}
+    ↓
+Laravel Router (api.php)
+    │
+    ├── Middleware: auth:sanctum  → extrae tenant_id del token
+    ├── Middleware: idempotency   → verifica/guarda IdempotencyKey
+    ├── Middleware: throttle      → rate limiting por tenant
+    ↓
+Controller (Api/V1/LeadController)
+    │
+    ↓
+Form Request (validación)
+    │
+    ↓
+Action / Service (lógica de negocio)
+    │
+    ↓
+Domain (Lead, PipelineStage, LeadActivityLog)
+    │
+    ↓
+Response JSON (API Resource)
 ```
 
 ## Flujo de petición web (Inertia)
@@ -53,41 +120,75 @@ Navegador → Laravel Router → Middleware (auth) → Controller → Inertia::r
                                                             Vue Component (SPA)
 ```
 
-## Flujo de petición API
-
-```
-Cliente externo → Laravel Router (api.php) → Middleware (auth:sanctum)
-    → Controller → Service → Domain → Response JSON
-```
+---
 
 ## Multi-tenancy
 
-Todos los modelos de negocio principales tendrán un campo `organization_id`.
-El scoping se aplicará automáticamente a través de un Global Scope o trait
-`BelongsToOrganization` para evitar fugas de datos entre tenants.
+**Campo:** `tenant_id` (UUID) presente en todas las entidades de negocio.
+
+El `tenant_id` proviene del token de autenticación, **nunca del body** de la petición.
+Se aplica automáticamente mediante un Global Scope o trait `HasTenant` para garantizar
+que cada query esté filtrada por tenant sin depender de que el developer lo recuerde.
 
 ```
-Organization (1) ──→ (N) Lead
-Organization (1) ──→ (N) Pipeline
-Organization (1) ──→ (N) User
+tenant_id ──→ (N) Lead
+tenant_id ──→ (N) PipelineStage
+tenant_id ──→ (N) LeadNote
+tenant_id ──→ (N) LeadActivityLog
+tenant_id ──→ (N) IdempotencyKey
 ```
+
+> **Actualización fase 6.2:** El campo fue renombrado de `organization_id` a `tenant_id`
+> para claridad semántica y alineación con el contexto multi-tenant del microservicio.
+
+---
 
 ## Idempotencia
 
-Las operaciones de escritura vía API aceptarán un header `Idempotency-Key`.
-El microservicio almacenará el resultado de la operación por un TTL configurable
-y devolverá la respuesta cacheada si la clave se repite.
+Las operaciones de escritura vía API aceptan el header `Idempotency-Key: {uuid}`.
+El microservicio almacena la respuesta original en `IdempotencyKey` con un TTL de
+24 horas (configurable). Si la misma clave se repite dentro del TTL, se retorna
+la respuesta almacenada sin re-ejecutar la operación.
+
+La unicidad del lead también se garantiza a nivel de datos mediante:
+`(tenant_id, source_system, external_reference_id)` — único cuando `external_reference_id` no es nulo.
+
+---
+
+## Usuarios como referencias externas
+
+Los usuarios asignados a leads **no se almacenan como entidad propia** en este servicio.
+Se referencia al usuario externo por `assigned_user_id` (ID opaco del sistema del cliente),
+y se capturan snapshots en el momento de la asignación:
+
+- `assigned_user_name_snapshot`
+- `assigned_user_email_snapshot`
+- `assigned_user_provider` (ej: `zend_platform`, `leads_service`)
+
+Esto garantiza que el historial del lead permanezca intacto aunque el usuario
+sea modificado o eliminado en el sistema de origen.
+
+---
+
+## Portabilidad tecnológica (NestJS)
+
+Los contratos API están versionados (`/api/v1`). Los DTOs son agnósticos al ORM.
+La lógica de negocio vive en `Domain/` y `Actions/`, separada de la capa HTTP.
+Ver `docs/domain-model.md` sección 10 para el detalle completo.
+
+---
 
 ## Base de datos
 
 - Schema: `leads_service`
 - Host: `127.0.0.1:3308`
 - Tablas base actuales: `users`, `sessions`, `cache`, `jobs`, `migrations`
-- Tablas de dominio: pendientes de implementación
+- Tablas de dominio: pendientes de implementación (fase 6.3)
 
 ## Consideraciones de seguridad
 
 - Autenticación web: sesión + CSRF (Breeze)
 - Autenticación API: tokens Sanctum (Bearer)
-- Rate limiting aplicado a rutas API
+- Rate limiting aplicado a rutas API por tenant
 - Validación estricta con Form Requests
+- Global Scope de tenant obligatorio en todos los modelos de negocio

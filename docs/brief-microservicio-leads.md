@@ -53,4 +53,4 @@ Centralizar todo el ciclo de vida de un lead comercial:
 - **Arquitectura**: Dominio en `app/Domain`, servicios en `app/Services`, DTOs en `app/DTOs`
 - **Auth doble**: Breeze/Inertia para el panel interno, Sanctum/JWT para la API
 - **Idempotencia**: Clave idempotente en headers para operaciones de escritura vía API
-- **Multi-tenant**: Scoping por `organization_id` en todos los modelos principales
+- **Multi-tenant**: Scoping por `tenant_id` en todos los modelos principales
