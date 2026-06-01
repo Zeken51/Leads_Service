@@ -7,6 +7,7 @@ use App\Domain\Leads\Enums\LeadPriority;
 use App\Domain\Leads\Enums\LeadStatus;
 use App\Domain\Pipeline\Models\PipelineStage;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -14,7 +15,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Lead extends Model
 {
-    use HasUuids, HasTenant, SoftDeletes;
+    use HasUuids, HasFactory, HasTenant, SoftDeletes;
+
+    protected static function newFactory(): \Database\Factories\LeadFactory
+    {
+        return \Database\Factories\LeadFactory::new();
+    }
 
     protected $fillable = [
         'tenant_id',

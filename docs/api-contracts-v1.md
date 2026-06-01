@@ -495,6 +495,8 @@ Programa la próxima acción y fecha de seguimiento.
 
 Registra que hubo un contacto real con el lead. Actualiza `last_contact_at=now()`.
 
+> **Por qué POST y no PATCH:** registrar un contacto es registrar un *evento*, no actualizar el estado parcial de un recurso. Cada llamada crea un nuevo registro `contact_registered` en el activity log. Dos llamadas legítimas producen dos eventos distintos. Ver `docs/technical-notes.md` nota #38.
+
 **Request:**
 ```json
 {
@@ -664,6 +666,8 @@ Lista todas las notas del lead en orden cronológico inverso.
 ### POST /api/v1/leads/{id}/notes
 
 Agrega una nota al lead. Actualiza `last_contact_at` del lead.
+
+> **Por qué las notas actualizan `last_contact_at`:** en este dominio, agregar una nota es siempre una señal de actividad comercial activa sobre el lead. `last_contact_at` representa la última vez que hubo actividad sobre el lead, no exclusivamente una conversación directa con el cliente. Para registrar un contacto con canal explícito (phone, whatsapp, etc.), usar `POST /contact`. Ver `docs/technical-notes.md` nota #39.
 
 **Request:**
 ```json

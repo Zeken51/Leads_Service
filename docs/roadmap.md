@@ -120,30 +120,51 @@
 
 ---
 
-## Fase 6.7 — Pipeline y acciones de estado
+## Fase 6.7 — Endpoints administrativos de gestión de leads ✓
 
-**Objetivo:** Implementar el flujo comercial del lead.
+**Objetivo:** Implementar el flujo comercial completo del lead vía API.
 
+### Listado y detalle
+- [x] `GET /api/v1/leads` con filtros (status, stage_id, assigned_to, source_system, source_channel, priority, followup_from, followup_to, overdue, search) y paginación page-based
+- [x] `GET /api/v1/leads/{id}` con stage, notas (últimas 10) y actividad (últimas 10)
+
+### Acciones de pipeline y estado
+- [x] `PATCH /api/v1/leads/{id}/stage` con reglas de transición y stages terminales won/lost
+- [x] `PATCH /api/v1/leads/{id}/assign` con snapshots de usuario externo
+- [x] `PATCH /api/v1/leads/{id}/followup` con validación de al menos un campo
+- [x] `POST /api/v1/leads/{id}/contact` con `contact_channel`, creación automática de nota
+- [x] `PATCH /api/v1/leads/{id}/won` con stage terminal, nota opcional, won_at
+- [x] `PATCH /api/v1/leads/{id}/lost` con `lost_reason` obligatorio, stage terminal
+
+### Notas y actividad
+- [x] `GET /api/v1/leads/{id}/notes` paginado
+- [x] `POST /api/v1/leads/{id}/notes` con actualización de `last_contact_at`
+- [x] `GET /api/v1/leads/{id}/activity` paginado con filtro por `event`
+
+### Infraestructura
+- [x] 7 FormRequests de validación
+- [x] 7 Actions de dominio (UpdateLeadStageAction, AssignLeadAction, ScheduleFollowupAction, RegisterLeadContactAction, MarkLeadWonAction, MarkLeadLostAction, CreateLeadNoteAction)
+- [x] LeadNoteResource, LeadActivityLogResource
+- [x] LeadNoteController, LeadActivityController
+- [x] LeadFactory, PipelineStageFactory
+- [x] Activity log automático en cada operación
+- [x] Abilities/capabilities validadas en cada endpoint
+- [x] Aislamiento multi-tenant verificado vía TenantScope + lookup explícito
+- [x] 104 tests de la fase (+ 63 previos = 167 total, todos pasando)
+
+### Validación contractual (post-6.7)
+- [x] `POST /contact` confirmado como POST (evento/acción, no PATCH de recurso)
+- [x] `last_contact_at` en notas documentado como decisión de dominio
+- [x] Abilities corregidas: `/followup`, `/contact`, `/won`, `/lost` → `leads:update`; `GET /notes`, `GET /activity` → `leads:read`
+- [x] Multi-tenant isolation verificado en todos los lookups explícitos
+- [x] Tests de abilities (`LeadAbilitiesTest`) — 22 tests, par correcto por endpoint
+- [x] Suite completa: **188 tests pasando**
+
+### Pendiente de fase 6.7+
+- [ ] `PATCH /api/v1/leads/{id}` (campos editables: customer, priority, metadata)
+- [ ] `DELETE /api/v1/leads/{id}` (archivado — status=archived)
 - [ ] `GET /api/v1/pipeline/stages` con `leads_count`
-- [ ] `PATCH /api/v1/leads/{id}/stage` con reglas de transición
-- [ ] `PATCH /api/v1/leads/{id}/assign`
-- [ ] `PATCH /api/v1/leads/{id}/followup`
-- [ ] `POST /api/v1/leads/{id}/contact` con `contact_channel`
-- [ ] `PATCH /api/v1/leads/{id}/won`
-- [ ] `PATCH /api/v1/leads/{id}/lost`
-- [ ] Activity Log automático en cada acción
-- [ ] Actualización automática de `last_contact_at`
-
----
-
-## Fase 6.7 — Notas y actividad
-
-**Objetivo:** Registro histórico completo.
-
-- [ ] `GET /api/v1/leads/{id}/notes` paginado
-- [ ] `POST /api/v1/leads/{id}/notes`
-- [ ] `GET /api/v1/leads/{id}/activity` paginado con filtro por `event`
-- [ ] Agregar nota dispara actualización de `last_contact_at`
+- [ ] Seeders con dos tenants, pipeline stages y leads de prueba
 
 ---
 
