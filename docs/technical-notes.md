@@ -276,11 +276,58 @@ Esto permite que ZendVacations envíe requests sin incluir `source_system` cada 
 
 Se eligió pasar `$idempotentReplay: bool` al constructor en lugar de usar `additional()` de JsonResource para mantener el flag DENTRO del objeto `data`, consistente con los contratos documentados.
 
-## Siguientes pasos inmediatos (fase 6.7)
+### 36. Route model binding deshabilitado para Lead — lookup explícito en controllers *(fase 6.7)*
 
-1. Implementar `GET /api/v1/leads` con filtros y paginación
-2. Implementar `GET /api/v1/leads/{id}` con notas + actividad reciente
-3. Implementar `PATCH /api/v1/leads/{id}` (campos editables)
-4. Implementar `DELETE /api/v1/leads/{id}` (archivado)
-5. Crear seeders con dos tenants, pipeline stages y leads de prueba
-6. Rate limiting por tenant
+`SubstituteBindings` middleware (route model binding) ejecuta como parte del grupo API antes que los route middlewares `auth:sanctum` y `set.tenant.context`. Esto significa que cuando Laravel resuelve `{lead}` automáticamente, `TenantContext` no está activo aún y el `TenantScope` no filtra.
+
+**Solución adoptada:** Los controllers reciben `string $lead` (UUID) y ejecutan `Lead::findOrFail($lead)` explícitamente dentro del método, cuando el middleware ya estableció `TenantContext`. Esto garantiza que el scope filtra correctamente y un UUID de otro tenant retorna 404 (ModelNotFoundException capturado por el exception handler).
+
+**Por qué no route model binding:** acoplar la resolución del modelo a la capa HTTP (via `resolveRouteBinding`) o mover `SubstituteBindings` al final del stack son soluciones más frágiles y difíciles de mantener.
+
+### 38. `POST /leads/{id}/contact` — POST es correcto, no PATCH *(validación 6.7)*
+
+El endpoint de registro de contacto usa `POST`, no `PATCH`. La distinción es semántica y deliberada:
+
+- `PATCH` sobre un recurso → actualiza campos del recurso (estado parcial)
+- `POST` sobre una sub-ruta de acción → registra un nuevo evento
+
+Registrar un contacto es **registrar que ocurrió un evento** (una llamada, una visita, un WhatsApp). Cada vez que se llama a este endpoint se crea un nuevo registro `contact_registered` en el activity log. No es idempotente en el sentido de "repetir la petición produce el mismo estado" — dos llamadas legítimas a `/contact` producen dos registros de actividad y actualizan `last_contact_at` dos veces. Esta es la semántica correcta para un evento de contacto.
+
+El contrato original en `api-contracts-v1.md` ya usaba `POST`. La implementación es consistente.
+
+### 39. Notas y `last_contact_at` — las notas son señales de actividad sobre el lead *(validación 6.7)*
+
+El endpoint `POST /leads/{id}/notes` actualiza `last_contact_at` del lead. Esta decisión está documentada explícitamente en el contrato (`api-contracts-v1.md`: "Agrega una nota al lead. Actualiza `last_contact_at` del lead") y en las reglas del dominio (`domain-model.md` sección 7: "`last_contact_at` se actualiza al: registrar contacto, agregar nota, cambiar stage").
+
+**Justificación:** En el contexto de este microservicio, una nota sobre un lead es siempre una señal de actividad comercial — el agente está trabajando activamente sobre el lead. `last_contact_at` representa "cuándo fue la última vez que hubo actividad sobre este lead", no estrictamente "última conversación directa con el cliente". Para registrar un contacto explícito con canal específico (phone, whatsapp, etc.), se usa `/contact`.
+
+Esta distinción está aceptada y documentada. No se modifica la implementación.
+
+### 40. Abilities de endpoints 6.7 — alineadas con contrato *(validación 6.7)*
+
+Tras la validación, se corrigió la tabla de abilities para alinearse con el contrato documentado:
+
+| Endpoint | Ability requerida | Anterior (incorrecto) |
+|---|---|---|
+| `PATCH /followup` | `leads:update` | `leads:followup` |
+| `POST /contact` | `leads:update` | `leads:contact` |
+| `PATCH /won` | `leads:update` | `leads:won` |
+| `PATCH /lost` | `leads:update` | `leads:lost` |
+| `GET /notes` | `leads:read` | `leads:notes:read` |
+| `GET /activity` | `leads:read` | `leads:activity:read` |
+
+**Razón:** Las abilities granulares (`leads:followup`, `leads:won`, etc.) existen en `ApiAbility` para configuración futura de tokens específicos, pero los endpoints de gestión estándar se protegen con `leads:update` (escritura general) y `leads:read` (lectura general), que es la convención más simple y predecible para los consumidores de la API. `leads:assign` se mantiene granular porque la asignación puede requerir un permiso separado (ej: solo supervisores).
+
+Los tests de `LeadAbilitiesTest` verifican el par correcto (qué rechaza y qué permite) para cada endpoint.
+
+### 37. Factories para Lead y PipelineStage — ubicados en Database\Factories *(fase 6.7)*
+
+Los modelos `Lead` y `PipelineStage` están en namespaces no estándar (`App\Domain\...`), por lo que el resolver automático de factories de Laravel no los encuentra. Se sobrescribió `newFactory()` en cada modelo para apuntar explícitamente a `Database\Factories\LeadFactory` y `Database\Factories\PipelineStageFactory`.
+
+## Siguientes pasos (fase 6.8+)
+
+1. `GET /api/v1/pipeline/stages` con `leads_count`
+2. `PATCH /api/v1/leads/{id}` (campos editables: customer, priority, metadata)
+3. `DELETE /api/v1/leads/{id}` (archivado — status=archived)
+4. Seeders con dos tenants, pipeline stages y leads de prueba
+5. Panel interno Inertia (fase 6.8)

@@ -425,7 +425,7 @@ excepto:
 | Etapa inicial | Primera stage del tenant (`is_initial=true`). Si no existe, se asigna null |
 | Etapas terminales | `is_terminal=true` en PipelineStage. Solo existen dos tipos: won/lost |
 | Bloqueo en terminales | Si `status=won` o `status=lost`, no se puede cambiar stage |
-| `last_contact_at` | Se actualiza al: registrar contacto, agregar nota, cambiar stage |
+| `last_contact_at` | Se actualiza al: registrar contacto (`/contact`), agregar nota (`/notes`), cambiar stage (`/stage`). Representa la última actividad comercial sobre el lead, no exclusivamente una interacción directa con el cliente. Para registrar el canal específico del contacto usar el endpoint `/contact`. |
 | `next_action` + `followup_at` | Recomendados (no bloqueantes) al avanzar de stage. Bloqueantes solo en fases futuras |
 | `lost_reason` | **Obligatorio** al marcar status=lost o mover a stage terminal de tipo lost |
 | `won_at` | Se llena automáticamente al marcar ganado |

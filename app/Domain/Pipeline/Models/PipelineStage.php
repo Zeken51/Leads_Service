@@ -6,13 +6,19 @@ use App\Domain\Concerns\HasTenant;
 use App\Domain\Leads\Enums\LeadStatus;
 use App\Domain\Leads\Models\Lead;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PipelineStage extends Model
 {
-    use HasUuids, HasTenant, SoftDeletes;
+    use HasUuids, HasFactory, HasTenant, SoftDeletes;
+
+    protected static function newFactory(): \Database\Factories\PipelineStageFactory
+    {
+        return \Database\Factories\PipelineStageFactory::new();
+    }
 
     protected $fillable = [
         'tenant_id',
