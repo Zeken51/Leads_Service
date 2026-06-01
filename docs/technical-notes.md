@@ -65,6 +65,40 @@ stage terminal, el status se actualiza automáticamente.
 Se requiere `lost_reason` para forzar al agente a documentar el motivo. Esto
 alimenta análisis de conversión en el futuro.
 
+### 11. Paginación page-based en lugar de cursor-based *(fase 6.3)*
+Se cambió de cursor-based (decisión preliminar en fase 6.2) a paginación por página (`page` + `per_page`).
+
+**Razón:** Los casos de uso del panel de agentes requieren navegación por número de página exacto ("ir a página 3"), ordenamiento dinámico y conteo total de resultados — funcionalidades que no son naturales con cursores. El volumen esperado por tenant no justifica la complejidad de cursor-based.
+
+**Impacto:** Los clientes API que implementen paginación deben usar `page`/`per_page`, no `cursor`.
+
+### 12. `request_id` universal en todas las respuestas *(fase 6.3)*
+Todas las respuestas de la API incluyen un campo `request_id` con formato `req_{8chars}`. El cliente puede enviar su propio ID en el header `X-Request-ID`; si no, el servidor lo genera.
+
+**Razón:** Trazabilidad end-to-end entre logs del servidor y reportes del cliente. Crítico para debug en producción.
+
+**Implementación:** Un middleware `RequestIdMiddleware` debe ejecutarse antes de todos los demás, inyectando el ID en el contexto de la request.
+
+### 13. Formato de error unificado con `message` + `errors` + `request_id` *(fase 6.3)*
+Se cambió el formato de error de `{ "error": { "code":..., "message":... } }` al formato:
+`{ "message": "...", "errors": {...}, "request_id": "..." }`.
+
+**Razón:** El nuevo formato es más cercano al comportamiento nativo de Laravel (validación), más familiar para developers PHP/Laravel, y más interoperable para una futura migración NestJS (que usa el mismo patrón por defecto).
+
+**Impacto:** Cualquier cliente que ya consuma la API debe actualizar su manejo de errores. Al ser una etapa pre-implementación, no hay impacto hoy.
+
+### 14. `contact_channel` pertenece al activity log, no al Lead *(fase 6.3)*
+El endpoint `POST /leads/{id}/contact` acepta un campo `contact_channel` (`phone`, `whatsapp`, `email`, `in_person`, `video_call`, `sms`, `other`). Este valor se guarda como columna dedicada en `lead_activity_logs`, **no en la tabla `leads`**.
+
+El Lead sólo recibe la actualización de `last_contact_at`. El canal de contacto es metadata del evento de actividad, no una propiedad permanente del lead.
+
+**Razón:** El canal de contacto puede variar en cada interacción. Almacenarlo en el activity log permite análisis histórico (ej: qué canal genera mejor conversión) sin contaminar el modelo principal del lead.
+
+### 15. JWT vs Sanctum Bearer — duda abierta *(fase 6.3)*
+El brief menciona "JWT" pero la implementación actual usará tokens Bearer de Sanctum (opacos, no JWT firmados). Sanctum puede configurarse para emitir JWT reales si se integra `tymon/jwt-auth` o si se usa Sanctum con `PersonalAccessToken` + formato JWT.
+
+**Por ahora:** usar Sanctum estándar. Si se requiere JWT real (para validación sin DB lookup, para claims enriquecidos o para compartir tokens entre microservicios), se evaluará en fase 6.5. Registrado como duda abierta.
+
 ---
 
 ## Riesgos identificados
@@ -89,7 +123,9 @@ alimenta análisis de conversión en el futuro.
 | ¿Los stages son compartidos o por tenant? | Por diseño actual: por tenant. Confirmar si hay stages globales | Media |
 | ¿`followup_at` y `next_action` son bloqueantes para avanzar de stage? | Por ahora son opcionales. Confirmar si deben ser obligatorios en fases futuras | Baja |
 | ¿Se requieren webhooks de salida? | No está en alcance pero es común en integraciones comerciales | Baja |
-| ¿El panel interno maneja múltiples tenants o un solo tenant? | Impacta el diseño del panel Inertia en fase 6.7 | Media |
+| ¿El panel interno maneja múltiples tenants o un solo tenant? | Impacta el diseño del panel Inertia en fase 6.8 | Media |
+| ¿JWT real o Sanctum Bearer opaco? | Sanctum estándar por ahora. Evaluar si se necesita JWT firmado en fase 6.5 | Media |
+| ¿Los tokens de API se vinculan a un `source_system` específico? | Mejora de seguridad pendiente. Un token de ZendVacations solo debería crear leads con `source_system=zend_vacations` | Baja |
 
 ---
 
@@ -113,12 +149,12 @@ alimenta análisis de conversión en el futuro.
 
 ---
 
-## Siguientes pasos inmediatos (fase 6.3)
+## Siguientes pasos inmediatos (fase 6.4)
 
 1. Crear estructura de carpetas del dominio (`Domain/`, `Services/`, `DTOs/`, `Actions/`)
 2. Crear trait `HasTenant` y Global Scope de tenant
 3. Diseñar y ejecutar migración de `pipeline_stages`
-4. Diseñar y ejecutar migración de `leads` con todos los campos definidos en fase 6.2
+4. Diseñar y ejecutar migración de `leads` (incluir `contact_channel` en `lead_activity_logs`)
 5. Diseñar y ejecutar migraciones de `lead_notes`, `lead_activity_logs`, `idempotency_keys`
-6. Crear modelos con relaciones y scoping
-7. Crear seeders con dos tenants y datos de prueba
+6. Crear modelos con relaciones, scoping y casts correctos
+7. Crear seeders con dos tenants, pipeline stages y leads de prueba
