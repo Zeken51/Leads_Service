@@ -94,6 +94,41 @@ El Lead sólo recibe la actualización de `last_contact_at`. El canal de contact
 
 **Razón:** El canal de contacto puede variar en cada interacción. Almacenarlo en el activity log permite análisis histórico (ej: qué canal genera mejor conversión) sin contaminar el modelo principal del lead.
 
+### 16. Estructura del dominio implementada *(fase 6.4)*
+
+```
+app/Domain/
+├── Concerns/HasTenant.php          ← trait aplicado a todos los modelos de negocio
+├── Tenants/TenantContext.php       ← portador estático del tenant_id activo
+├── Tenants/TenantScope.php         ← Global Scope aplicado vía HasTenant
+├── Leads/Enums/                    ← LeadStatus, LeadPriority, LeadEvent, CauserType, ContactChannel
+├── Leads/Models/                   ← Lead, LeadNote, LeadActivityLog
+├── Pipeline/Models/PipelineStage
+└── Idempotency/Models/IdempotencyKey
+```
+
+El `TenantContext` se activa cuando el middleware de autenticación (fase 6.5) llame a `TenantContext::set($tenantId)`. Hasta entonces, el Global Scope no filtra (comportamiento seguro para seeders y tests).
+
+### 17. `event_type` como nombre de columna en `lead_activity_logs` *(fase 6.4)*
+
+El task brief especificó `event_type` como nombre de columna. Los docs anteriores usaban `event`. Se adoptó `event_type` (más explícito) en la tabla. La API Resource de fase 6.5 lo mapeará a `event` en la respuesta JSON para mantener el contrato documentado en `api-contracts-v1.md`.
+
+### 18. `content` como nombre en `lead_notes` (no `note`) *(fase 6.4)*
+
+El task brief mencionó `note` como campo, pero el domain model y los contratos API usan `content`. Se implementó `content` para mantener consistencia con los contratos ya documentados.
+
+### 19. `request_hash` en `idempotency_keys` *(fase 6.4)*
+
+Se agregó un campo `request_hash` (SHA-256 de method + path + body normalizado) a la tabla `idempotency_keys`. Permite detectar peticiones idénticas por contenido incluso cuando el cliente no envía `Idempotency-Key`. El middleware de idempotencia (fase 6.5) lo calculará y usará como fallback.
+
+### 20. `lead_id` nullable en `idempotency_keys` *(fase 6.4)*
+
+El campo `lead_id` en `idempotency_keys` es nullable porque el registro de idempotencia se crea antes de que el lead exista (para capturar el intento). Se rellena con el UUID del lead creado exitosamente.
+
+### 21. Índice único `(tenant_id, source_system, external_reference_id)` en `leads` *(fase 6.4)*
+
+Se implementó como unique index named `leads_tenant_source_ext_ref_unique`. MySQL permite múltiples NULLs en columnas de un índice único, por lo que filas con `external_reference_id = NULL` no colisionan entre sí. La unicidad solo se aplica cuando los tres valores son no nulos.
+
 ### 15. JWT vs Sanctum Bearer — duda abierta *(fase 6.3)*
 El brief menciona "JWT" pero la implementación actual usará tokens Bearer de Sanctum (opacos, no JWT firmados). Sanctum puede configurarse para emitir JWT reales si se integra `tymon/jwt-auth` o si se usa Sanctum con `PersonalAccessToken` + formato JWT.
 
@@ -149,12 +184,44 @@ El brief menciona "JWT" pero la implementación actual usará tokens Bearer de S
 
 ---
 
-## Siguientes pasos inmediatos (fase 6.4)
+### 22. `external_reference_id` es opcional — sin deduplicación nivel 2 si es NULL *(fix post-6.4)*
 
-1. Crear estructura de carpetas del dominio (`Domain/`, `Services/`, `DTOs/`, `Actions/`)
-2. Crear trait `HasTenant` y Global Scope de tenant
-3. Diseñar y ejecutar migración de `pipeline_stages`
-4. Diseñar y ejecutar migración de `leads` (incluir `contact_channel` en `lead_activity_logs`)
-5. Diseñar y ejecutar migraciones de `lead_notes`, `lead_activity_logs`, `idempotency_keys`
-6. Crear modelos con relaciones, scoping y casts correctos
-7. Crear seeders con dos tenants, pipeline stages y leads de prueba
+`external_reference_id` no es obligatorio para ningún tenant. Tenants que ingresan leads manualmente o desde sistemas sin ID externo pueden omitirlo. Cuando está presente, activa la protección de deduplicación por datos `(tenant_id, source_system, external_reference_id)`. Cuando está ausente, solo el `Idempotency-Key` header protege contra duplicados.
+
+El índice `UNIQUE(tenant_id, source_system, external_reference_id)` en MySQL 8 permite múltiples filas con `external_reference_id = NULL` bajo el mismo tenant/source_system — es el comportamiento correcto e intencional.
+
+### 23. `status` y `stage_id` son fuentes de verdad distintas — sincronización es responsabilidad de la lógica de negocio *(fix post-6.4)*
+
+`status` (active/won/lost/archived) es la fuente de verdad del estado del sistema. `stage_id` es la fuente de verdad de la posición comercial en el pipeline. No son redundantes. La sincronización entre ellos ocurre en las Actions (capa de negocio), nunca en triggers de DB ni en el modelo. Ver `domain-model.md` sección 5 para la tabla de reglas completa.
+
+`stage_id` puede ser NULL cuando el tenant no tiene pipeline configurado — en ese caso `status` es el único indicador de estado.
+
+### 24. Estrategia segura para `TenantContext` en todos los contextos *(fix post-6.4)*
+
+El `TenantScope` solo aplica cuando `TenantContext::isSet()` es `true`. Esto es intencional y seguro por defecto:
+
+| Contexto | Comportamiento | Acción requerida |
+|---|---|---|
+| HTTP request | Middleware `SetTenantFromToken` llama `set()` y `clear()` | Automático en fase 6.5 |
+| Queue worker/Job | `TenantContext` **no está seteado** — el scope no filtra | El Job debe llamar `TenantContext::withTenant($this->tenantId, fn()=>...)` en `handle()` |
+| Artisan command | `TenantContext` no está seteado — el scope no filtra | Pasar `tenant_id` explícito al crear modelos, o usar `withTenant()` |
+| Database seeder | `TenantContext` no está seteado — el scope no filtra | Pasar `tenant_id` explícito en el array de datos, o llamar `TenantContext::set()` al inicio |
+| Tests | `TenantContext` no está seteado por defecto | Llamar `TenantContext::withTenant($tenantId, fn()=>...)` en el test, o `set()`/`clear()` en setUp/tearDown |
+
+Se agregó `TenantContext::withTenant(string $tenantId, callable $callback): mixed` que establece el contexto, ejecuta el callback y restaura el estado previo en un bloque `try/finally`. Es el patrón recomendado para jobs y tests.
+
+**Riesgo mitigado:** Si un Job olvida setear el contexto, las queries no filtrarán por tenant. Para prevenir esto, en fase 6.5 se documentará un contrato: "Todo Job que use modelos con `HasTenant` DEBE llamar `withTenant()` en `handle()`."
+
+Se corrigió también `self $model` → `Model $model` en el closure del trait `HasTenant` para evitar ambigüedad de resolución de `self` en traits de PHP.
+
+## Siguientes pasos inmediatos (fase 6.5)
+
+1. Configurar `routes/api.php` con prefijo `/api/v1`
+2. Crear middleware `RequestIdMiddleware`
+3. Crear middleware `SetTenantFromToken` (llama a `TenantContext::set()`)
+4. Crear middleware `IdempotencyMiddleware`
+5. Implementar endpoints de auth (`POST /api/v1/auth/login`, `logout`)
+6. Implementar `GET /api/v1/leads` con filtros
+7. Implementar `POST /api/v1/leads` con idempotencia
+8. Crear API Resources para respuestas consistentes
+9. Crear seeders con dos tenants, pipeline stages y leads de prueba

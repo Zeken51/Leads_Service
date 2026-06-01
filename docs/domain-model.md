@@ -94,8 +94,11 @@ referencias al sistema de origen y snapshots del usuario asignado.
 | `updated_at` | timestamp | |
 | `deleted_at` | timestamp nullable | Soft delete |
 
-**Unicidad idempotente:**
-`(tenant_id, source_system, external_reference_id)` debe ser único cuando `external_reference_id` no es nulo.
+**`external_reference_id` es opcional:**
+Tenants que ingresan leads manualmente o desde sistemas sin ID propio pueden omitirlo. En ese caso el lead se crea sin protección de deduplicación de nivel 2 (solo aplica el `Idempotency-Key` header).
+
+**Unicidad idempotente (nivel 2):**
+`(tenant_id, source_system, external_reference_id)` es único cuando `external_reference_id` no es nulo. MySQL 8 permite múltiples filas con `external_reference_id = NULL` bajo el mismo índice UNIQUE — el índice solo actúa cuando los tres valores son no nulos.
 
 ---
 
@@ -288,6 +291,23 @@ lost       [terminal]
 | `won` | Convertido/ganado — estado terminal |
 | `lost` | Perdido/descartado — estado terminal |
 | `archived` | Inactivo temporalmente, no en pipeline activo |
+
+### Relación entre `status` y `stage_id`
+
+Son campos distintos, **no redundantes**. `status` es la fuente de verdad del estado del sistema; `stage_id` es la fuente de verdad de la posición comercial.
+
+**Reglas de sincronización (aplicadas por la lógica de negocio, no por la DB):**
+
+| Acción | Efecto en `status` | Efecto en `stage_id` |
+|---|---|---|
+| Mover a stage terminal `maps_to_status=won` | → `won` automático | Se actualiza al stage terminal |
+| Mover a stage terminal `maps_to_status=lost` | → `lost` automático | Se actualiza al stage terminal |
+| Llamar a `/won` directamente | → `won` | Se mueve al stage terminal `won` del tenant si existe; si no, `stage_id` queda sin cambio |
+| Llamar a `/lost` directamente | → `lost` | Se mueve al stage terminal `lost` del tenant si existe; si no, `stage_id` queda sin cambio |
+| `status=won` o `status=lost` | No se puede cambiar `stage_id` | Bloqueado |
+| `status=archived` | No afecta `stage_id` | Sin cambio |
+
+`stage_id` puede ser `NULL` si el tenant no tiene pipeline configurado. En ese caso `status` es la única fuente de estado del lead.
 
 ### 5.2 Stage del pipeline (campo `stage_id`)
 
