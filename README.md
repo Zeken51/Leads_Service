@@ -1,58 +1,137 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# leads-service
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Microservicio independiente para gestión de leads y seguimiento comercial.
 
-## About Laravel
+## Objetivo
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Centralizar el ciclo de vida de un lead: captura, pipeline comercial, seguimiento,
+notas, activity log y soporte multi-tenant, con panel interno y API autenticada.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Stack
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+| Tecnología | Versión | Rol |
+|---|---|---|
+| Laravel | 13.7.0 | Framework backend |
+| Inertia.js | ^2.0 | Bridge SPA para el panel interno |
+| Vue 3 | ^3.4 | Framework frontend |
+| Tailwind CSS | ^3.2 | Estilos utilitarios |
+| Vite | ^8.0 | Build tool frontend |
+| MySQL | 8.0.44 | Base de datos |
+| Laravel Breeze | ^2.4 | Autenticación web (panel interno) |
+| Laravel Sanctum | ^4.0 | Autenticación API (tokens) |
 
-## Learning Laravel
+## Estado actual
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+**Fase 6.1 — Fundación técnica completada**
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- Stack instalado y verificado
+- Base de datos conectada (`leads_service`)
+- Migraciones base ejecutadas
+- Login funcional en panel interno
+- Documentación inicial generada
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+Pendiente: dominio, modelos, API endpoints, pipeline, multi-tenant.
 
-## Agentic Development
+Ver [docs/roadmap.md](docs/roadmap.md) para el detalle completo.
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Estructura del proyecto
 
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+app/
+├── Domain/          ← lógica de negocio (propuesta, pendiente de implementar)
+│   ├── Leads/
+│   ├── Pipeline/
+│   └── Organizations/
+├── Services/        ← orquestadores de casos de uso
+├── DTOs/            ← objetos de transferencia de datos
+├── Actions/         ← acciones atómicas
+├── Http/
+│   ├── Controllers/
+│   │   ├── Auth/    ← autenticación web (Breeze)
+│   │   └── Api/     ← API endpoints (pendiente)
+│   └── Requests/
+├── Models/
+└── Providers/
+docs/
+├── brief-microservicio-leads.md
+├── architecture.md
+├── api-contracts-v1.md
+├── roadmap.md
+└── technical-notes.md
+resources/js/
+├── Pages/           ← vistas Inertia
+├── Components/      ← componentes Vue
+└── Layouts/
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+## Levantar el proyecto localmente
 
-## Contributing
+### Requisitos previos
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+- PHP 8.3
+- Composer
+- Node.js 22+
+- MySQL 8.0 corriendo en puerto 3308
 
-## Code of Conduct
+### Pasos
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+# 1. Instalar dependencias
+composer install
+npm install
 
-## Security Vulnerabilities
+# 2. Configurar entorno
+cp .env.example .env
+php artisan key:generate
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+# 3. Ejecutar migraciones
+php artisan migrate
 
-## License
+# 4. Levantar servidores de desarrollo
+# Terminal 1: PHP
+php artisan serve
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+# Terminal 2: Vite (frontend)
+npm run dev
+```
+
+La aplicación estará disponible en `http://localhost:8000`.
+
+### Atajo (comando compuesto)
+
+```bash
+composer dev
+```
+
+Levanta en paralelo: PHP server, queue worker, log viewer y Vite.
+
+### Primer usuario de prueba
+
+```bash
+php artisan tinker
+# En tinker:
+\App\Models\User::factory()->create(['email' => 'admin@test.com', 'password' => bcrypt('password')]);
+```
+
+## Documentación
+
+| Documento | Descripción |
+|---|---|
+| [docs/brief-microservicio-leads.md](docs/brief-microservicio-leads.md) | Descripción general y alcance |
+| [docs/architecture.md](docs/architecture.md) | Arquitectura técnica y capas |
+| [docs/api-contracts-v1.md](docs/api-contracts-v1.md) | Contratos de API (borrador) |
+| [docs/roadmap.md](docs/roadmap.md) | Fases e ítems pendientes |
+| [docs/technical-notes.md](docs/technical-notes.md) | Decisiones, riesgos y observaciones |
+
+## Variables de entorno relevantes
+
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3308
+DB_DATABASE=leads_service
+
+SESSION_DRIVER=database
+QUEUE_CONNECTION=database
+CACHE_STORE=database
+```
