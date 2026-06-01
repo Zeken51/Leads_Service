@@ -73,25 +73,31 @@
 
 ---
 
-## Fase 6.5 — API base (Auth + CRUD + Middleware)
+## Fase 6.5 — Auth base + Middleware + RequestContext ✓
 
-**Objetivo:** Exponer endpoints básicos de leads vía API autenticada.
+**Objetivo:** Implementar la base de autenticación, identificación de requests y contexto tenant-aware.
 
-- [ ] Configurar `routes/api.php` con prefijo `/api/v1`
-- [ ] Middleware: `RequestId` (genera/preserva `X-Request-ID`)
-- [ ] Middleware: extracción de `tenant_id` desde token Sanctum
-- [ ] Middleware: `IdempotencyMiddleware` (verifica/guarda `IdempotencyKey`)
-- [ ] Middleware: rate limiting por tenant
-- [ ] `POST /api/v1/auth/login` y `logout`
-- [ ] `GET /api/v1/leads` con todos los filtros documentados
-- [ ] `POST /api/v1/leads` con idempotencia (2 niveles)
-- [ ] `GET /api/v1/leads/{id}` con notas + actividad reciente
-- [ ] `PATCH /api/v1/leads/{id}` (campos editables)
-- [ ] `DELETE /api/v1/leads/{id}` (archivado)
-- [ ] API Resources consistentes con el formato de respuesta estándar
-- [ ] Form Requests con validación completa
-- [ ] Tests de feature para endpoints
-- [ ] `GET /api/health`
+- [x] Sanctum instalado y configurado
+- [x] Migraciones: `personal_access_tokens`, `add_tenant_id_to_users`, `tenant_api_clients`
+- [x] Modelo `TenantApiClient` con `HasApiTokens` y campos `source_system`/`source_channel`
+- [x] Modelo `User` actualizado con `tenant_id` y `HasApiTokens`
+- [x] Enum `ApiAbility` con capabilities completas + helpers `forAgent()`, `forExternalCreator()`
+- [x] `RequestContext` — DTO inmutable con request_id, tenant_id, source_system, client, abilities
+- [x] Middleware `SetRequestId` — genera/preserva `X-Request-ID`, registra contexto inicial
+- [x] Middleware `SetTenantContext` — extrae tenant_id del cliente autenticado, activa `TenantContext`
+- [x] Middleware `EnsureJsonApiHeaders` — fuerza Accept:json, valida Content-Type en writes
+- [x] `ApiResponse` — helper estático para respuestas consistentes con `request_id`
+- [x] Exception handler — formatea todos los errores API con envelope `message/errors/request_id`
+- [x] `routes/api.php` registrado con middleware API
+- [x] `POST /api/v1/auth/login` funcional
+- [x] `POST /api/v1/auth/logout` funcional
+- [x] `GET /api/health` funcional
+- [x] Fix: `tokenable_id` cambiado a varchar(255) para soportar UUIDs de TenantApiClient
+- [x] Fix: validación `is_active` en SetTenantContext para clientes API inactivos
+- [x] Fix: rechazo de User sin `tenant_id` (403) en rutas protegidas
+- [x] Tests: 20 tests Feature (health, auth, middleware, is_active, tenant)
+- [ ] Middleware de idempotencia (fase 6.6)
+- [ ] Rate limiting por tenant (fase 6.6)
 
 ---
 

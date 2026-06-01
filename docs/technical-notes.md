@@ -214,14 +214,57 @@ Se agregó `TenantContext::withTenant(string $tenantId, callable $callback): mix
 
 Se corrigió también `self $model` → `Model $model` en el closure del trait `HasTenant` para evitar ambigüedad de resolución de `self` en traits de PHP.
 
-## Siguientes pasos inmediatos (fase 6.5)
+### 25. `TenantApiClient` como modelo separado para clientes machine-to-machine *(fase 6.5)*
 
-1. Configurar `routes/api.php` con prefijo `/api/v1`
-2. Crear middleware `RequestIdMiddleware`
-3. Crear middleware `SetTenantFromToken` (llama a `TenantContext::set()`)
-4. Crear middleware `IdempotencyMiddleware`
-5. Implementar endpoints de auth (`POST /api/v1/auth/login`, `logout`)
-6. Implementar `GET /api/v1/leads` con filtros
-7. Implementar `POST /api/v1/leads` con idempotencia
-8. Crear API Resources para respuestas consistentes
-9. Crear seeders con dos tenants, pipeline stages y leads de prueba
+Se creó `tenant_api_clients` como tabla y modelo separado de `users`. Tiene `HasApiTokens` de Sanctum, por lo que puede emitir Bearer tokens. Sus tokens llevan `source_system` y `source_channel` del cliente, lo que permite que el `RequestContext` los exponga automáticamente sin que el cliente los envíe en el body.
+
+**Razón:** Separar clientes API de sistema (ZendVacations, forms, etc.) de usuarios humanos del panel.
+
+### 26. `RequestContext` como DTO inmutable por request *(fase 6.5)*
+
+`RequestContext` es un readonly-property DTO construido en dos pasos:
+1. `SetRequestId` lo crea con solo `request_id` y lo registra en el contenedor
+2. `SetTenantContext` lo reemplaza con una copia enriquecida (`withAuth()`) que incluye tenant, client y abilities
+
+Se registra en `app()->instance(RequestContext::class, $context)` para que los controllers lo reciban por inyección de dependencias.
+
+### 27. Exception handler centralizado en `bootstrap/app.php` *(fase 6.5)*
+
+Laravel 11 configura excepciones en `bootstrap/app.php` via `withExceptions()`. El renderable verifica `$request->expectsJson()` para aplicar el formato `{ message, errors, request_id }` solo a rutas API. Las rutas web siguen con el handler por defecto de Laravel/Inertia.
+
+### 29. `personal_access_tokens.tokenable_id` cambiado a `varchar(255)` *(fix post-6.5)*
+
+Sanctum crea `tokenable_id` como `BIGINT UNSIGNED`, pero `TenantApiClient` usa UUID como PK. Se creó la migración `2026_06_01_200002` para cambiar la columna a `VARCHAR(255)`. MySQL acepta enteros (IDs de `users`) en columnas varchar sin pérdida. La migración es no-op en SQLite (driver dinámicamente tipado).
+
+### 30. Flujo de auth: `users` para panel interno, `TenantApiClient` para clientes externos *(fix post-6.5)*
+
+Distinción documentada:
+- `users` → agentes humanos del panel Inertia, pueden obtener tokens API con `ApiAbility::forAgent()`
+- `TenantApiClient` → sistemas externos (ZendVacations, web forms), tokens de larga duración con `ApiAbility::forExternalCreator()` o custom
+- Login endpoint (`/api/v1/auth/login`) es solo para `users`
+- Los `TenantApiClient` reciben sus tokens fuera de banda (creados por admin)
+
+### 31. `is_active` validado en `SetTenantContext`, no en auth:sanctum *(fix post-6.5)*
+
+El check de `is_active` en `TenantApiClient` vive en `SetTenantContext` (que se aplica al grupo de rutas de negocio), no en el middleware `auth:sanctum`. Esto permite que `logout` funcione para clientes inactivos (revocar token siempre debe ser posible), mientras que todas las operaciones de negocio son bloqueadas.
+
+### 32. Usuario sin `tenant_id` recibe 403 en rutas protegidas *(fix post-6.5)*
+
+Si un `User` tiene `tenant_id = null` y obtiene un token, `SetTenantContext` retorna 403 con mensaje `'No tenant associated with this token.'`. Esto protege contra operaciones sin contexto de tenant en un sistema multi-tenant.
+
+### 28. `tenant_id` agregado a `users` como nullable *(fase 6.5)*
+
+Se agregó `tenant_id` nullable a la tabla `users` para que los agentes del panel puedan pertenecer a un tenant y obtener tokens API con contexto de tenant. Es nullable para no romper usuarios existentes de Breeze.
+
+## Siguientes pasos inmediatos (fase 6.6)
+
+1. Crear middleware `IdempotencyMiddleware`
+2. Crear rate limiting por tenant
+3. Implementar `GET /api/v1/leads` con filtros y paginación
+4. Implementar `POST /api/v1/leads` con idempotencia (2 niveles)
+5. Implementar `GET /api/v1/leads/{id}`
+6. Implementar `PATCH /api/v1/leads/{id}` y `DELETE`
+7. Crear API Resources para respuestas consistentes
+8. Form Requests con validación
+9. Feature tests de endpoints
+10. Seeders con dos tenants, pipeline stages y leads de prueba
