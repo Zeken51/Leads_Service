@@ -168,7 +168,38 @@
 
 ---
 
-## Fase 6.8 — Panel interno Inertia
+## Fix post-6.8 — Validación de reglas terminales ✓
+
+**Objetivo:** Eliminar comportamientos silenciosos y dejar los contratos completamente explícitos.
+
+- [x] `PATCH /stage` con stage terminal rechaza `next_action`/`followup_at` con 422 (antes: ignoraba silenciosamente)
+- [x] Documentado: `/stage` vs `/won`/`/lost` como flujos alternativos equivalentes de cierre
+- [x] `api-errors.md` con códigos `FOLLOWUP_ON_TERMINAL_STAGE` y `FOLLOWUP_ON_CLOSED_LEAD`
+- [x] PipelineRulesTest: 2 tests renombrados (ignores→rejects) + 4 tests nuevos para confirmaciones positivas
+- [x] Suite completa: **222 tests pasando**
+
+---
+
+## Fase 6.8 — Consolidación de reglas comerciales del pipeline ✓
+
+**Objetivo:** Asegurar que las operaciones existentes respeten reglas de negocio consistentes.
+
+- [x] `last_contact_at` corregido: solo se actualiza en `/contact` (notas y stage ya no lo actualizan)
+- [x] Stages terminales: `next_action`/`followup_at` ignorados al mover a won/lost via `/stage`
+- [x] `/followup` bloqueado en leads terminales (won/lost) → 422
+- [x] `next_action` obligatorio cuando se provee `followup_at` en `/followup`
+- [x] Filtro `overdue` validado: excluye correctamente leads won/lost (solo activos)
+- [x] Activity logs: event_data consistente en stage_changed (from/to), contact_registered (channel), followup_scheduled (action+date), won/lost (at+reason)
+- [x] `Lead::isOverdue()` excluye terminales correctamente
+- [x] Asignación: solo referencias externas, sin depender de usuarios internos
+- [x] Stage inicial en creación: usa `is_initial=true` del tenant, o `null` si no hay pipeline configurado
+- [x] Documentación actualizada: domain-model.md, api-contracts-v1.md, technical-notes.md (#41–44)
+- [x] Tests: `PipelineRulesTest` (30 tests nuevos) + ajustes en LeadStageTest, LeadNotesTest, LeadFollowupTest
+- [x] Suite completa: **220 tests pasando**
+
+---
+
+## Fase 6.8 (anterior) — Panel interno Inertia
 
 **Objetivo:** UI funcional para gestión de leads.
 

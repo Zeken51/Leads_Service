@@ -53,14 +53,27 @@ class LeadFollowupTest extends LeadApiTestCase
 
     public function test_updates_followup_at(): void
     {
+        // followup_at requiere next_action para describir qué se hará en esa fecha
         $token     = $this->tokenForUser();
         $lead      = $this->createLead(self::TENANT_A);
         $futureDate = now()->addDays(3)->toISOString();
 
-        $this->patchFollowup($token, $lead->id, ['followup_at' => $futureDate])
-            ->assertOk();
+        $this->patchFollowup($token, $lead->id, [
+            'next_action' => 'Llamar para confirmar',
+            'followup_at' => $futureDate,
+        ])->assertOk();
 
         $this->assertNotNull($lead->fresh()->followup_at);
+    }
+
+    public function test_followup_at_without_next_action_returns_422(): void
+    {
+        $token = $this->tokenForUser();
+        $lead  = $this->createLead(self::TENANT_A);
+
+        $this->patchFollowup($token, $lead->id, ['followup_at' => now()->addDay()->toISOString()])
+            ->assertUnprocessable()
+            ->assertJsonStructure(['errors' => ['next_action']]);
     }
 
     public function test_updates_both_fields(): void

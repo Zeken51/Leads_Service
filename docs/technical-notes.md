@@ -284,6 +284,54 @@ Se eligió pasar `$idempotentReplay: bool` al constructor en lugar de usar `addi
 
 **Por qué no route model binding:** acoplar la resolución del modelo a la capa HTTP (via `resolveRouteBinding`) o mover `SubstituteBindings` al final del stack son soluciones más frágiles y difíciles de mantener.
 
+### 45. Stages terminales rechazan `next_action`/`followup_at` con 422 *(fix post-6.8)*
+
+Corrección del comportamiento de fase 6.8: cuando `PATCH /leads/{id}/stage` apunta a un stage terminal (won o lost) y el payload incluye `next_action` o `followup_at` con valor no nulo, la respuesta es **422** con errores específicos por campo.
+
+**Razón del cambio (silently ignore → 422):**
+- Ignorar datos silenciosamente es deceptivo: el cliente cree que su follow-up fue programado, pero el lead ya está cerrado
+- La convención de la API es ser explícita en errores de negocio
+- Consistente con el patrón existente: `lost_reason` requerido al cerrar como lost (no se ignora)
+
+**Cuándo usar `/stage` vs `/won`/`/lost`:**
+- `/stage` con stage terminal: cuando el agente navega explícitamente por las etapas del pipeline hasta el cierre
+- `/won` directamente: cuando el cierre no requiere navegación de pipeline (ej: tenant sin stages configurados)
+- Ambos flujos son válidos y producen el mismo resultado final
+
+### 41. `last_contact_at` — solo se actualiza en `/contact` *(fase 6.8)*
+
+Revisión de comportamiento: a partir de la fase 6.8, `last_contact_at` **solo** se actualiza cuando se registra un contacto real vía `POST /leads/{id}/contact`. Ni los cambios de stage ni las notas lo actualizan.
+
+**Razón:**
+- `last_contact_at` = "última vez que el agente habló con el prospecto"
+- `/contact` es la señal explícita de "hablé con el cliente" — registra `contact_channel` (teléfono, WhatsApp, email, etc.)
+- `/notes` = registro interno del agente (puede ser una observación, un recordatorio, etc.) — no implica contacto
+- `/stage` = gestión del pipeline — avanzar de etapa no necesariamente implica que hubo una conversación con el cliente
+
+Si el agente avanzó la etapa porque habló con el cliente, el flujo correcto es:
+1. `POST /contact` (registrar el contacto con `contact_channel`)
+2. `PATCH /stage` (avanzar la etapa)
+
+**Impacto:** Cambio breaking respecto a lo documentado en fase 6.7. El contrato de `/notes` fue actualizado en `api-contracts-v1.md`. El contrato de `/stage` no mencionaba explícitamente esta actualización.
+
+### 42. Stages terminales no actualizan `next_action`/`followup_at` *(fase 6.8)*
+
+Cuando un lead avanza a un stage terminal (won o lost) vía `PATCH /stage`, los campos `next_action` y `followup_at` del lead **no se actualizan** aunque se envíen en el payload.
+
+**Razón:** Un lead ganado o perdido no tiene próximas acciones pendientes. Actualizar `followup_at` en un lead terminal sería confuso y podría aparecer erróneamente en el filtro `overdue`.
+
+### 43. `/followup` bloqueado en leads terminales *(fase 6.8)*
+
+El endpoint `PATCH /leads/{id}/followup` retorna 422 si el lead está en status `won` o `lost`. Un lead cerrado no puede tener nuevas fechas de seguimiento.
+
+**Razón:** Conservar la integridad semántica del campo `followup_at` — solo leads activos tienen seguimientos pendientes. El filtro `overdue` ya excluye terminales, pero bloquear el endpoint previene actualizaciones inconsistentes.
+
+### 44. `next_action` obligatorio cuando se provee `followup_at` *(fase 6.8)*
+
+La request `ScheduleFollowupRequest` valida que si se envía `followup_at`, también se envíe `next_action`.
+
+**Razón:** `followup_at` sin `next_action` es una fecha sin contexto. El agente necesita especificar qué hará en esa fecha. Si solo quiere registrar una acción sin fecha, puede enviar solo `next_action`.
+
 ### 38. `POST /leads/{id}/contact` — POST es correcto, no PATCH *(validación 6.7)*
 
 El endpoint de registro de contacto usa `POST`, no `PATCH`. La distinción es semántica y deliberada:

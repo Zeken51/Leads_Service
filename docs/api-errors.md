@@ -182,6 +182,8 @@ Intentar marcar como perdido sin `lost_reason`:
 | `INVALID_STAGE_TRANSITION` | La transición de stage no está permitida |
 | `MISSING_LOST_REASON` | Se intentó cerrar como perdido sin motivo |
 | `STAGE_NOT_IN_TENANT` | El stage_id no pertenece al tenant |
+| `FOLLOWUP_ON_TERMINAL_STAGE` | Se enviaron `next_action`/`followup_at` al mover a stage terminal |
+| `FOLLOWUP_ON_CLOSED_LEAD` | Se intentó programar followup en lead won o lost |
 
 ---
 
