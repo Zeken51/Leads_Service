@@ -90,9 +90,11 @@ Cliente externo
     │ POST /api/v1/leads
     │ Authorization: Bearer {token}
     │ Idempotency-Key: {uuid}
+    │ X-Request-ID: {uuid}
     ↓
 Laravel Router (api.php)
     │
+    ├── Middleware: request_id    → genera/preserva X-Request-ID
     ├── Middleware: auth:sanctum  → extrae tenant_id del token
     ├── Middleware: idempotency   → verifica/guarda IdempotencyKey
     ├── Middleware: throttle      → rate limiting por tenant
@@ -109,7 +111,7 @@ Action / Service (lógica de negocio)
 Domain (Lead, PipelineStage, LeadActivityLog)
     │
     ↓
-Response JSON (API Resource)
+Response JSON (API Resource) → incluye request_id
 ```
 
 ## Flujo de petición web (Inertia)
@@ -178,12 +180,19 @@ Ver `docs/domain-model.md` sección 10 para el detalle completo.
 
 ---
 
+## URLs del servicio
+
+| Entorno | URL base |
+|---|---|
+| Producción | `https://leads.zendlogic.com` |
+| Desarrollo local | `http://localhost:8000` |
+
 ## Base de datos
 
 - Schema: `leads_service`
 - Host: `127.0.0.1:3308`
 - Tablas base actuales: `users`, `sessions`, `cache`, `jobs`, `migrations`
-- Tablas de dominio: pendientes de implementación (fase 6.3)
+- Tablas de dominio: pendientes de implementación (fase 6.4)
 
 ## Consideraciones de seguridad
 

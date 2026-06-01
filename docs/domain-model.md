@@ -54,7 +54,7 @@ registra cada interacción, cambio de estado y nota para dar trazabilidad comple
 Representa a la organización que usa el microservicio. **No se almacena como tabla propia** en esta etapa — se referencia únicamente por `tenant_id` (UUID). Toda entidad de negocio lleva este campo para el scoping multi-tenant.
 
 ```
-tenant_id: uuid  ← viene del token de autenticación o del payload
+tenant_id: uuid  ← se extrae del token de autenticación. Nunca del body ni del payload
 ```
 
 > Decisión: si en el futuro se requiere metadata del tenant (nombre, configuración),
@@ -177,6 +177,7 @@ Registro inmutable de cada evento significativo en el ciclo de vida del lead.
 | `causer_id` | string nullable | ID externo del actor |
 | `causer_name_snapshot` | string nullable | Nombre del actor al momento del evento |
 | `causer_type` | enum | `user`, `system`, `api_client` |
+| `contact_channel` | string nullable | Canal del contacto. **Solo aplica al evento `contact_registered`.** No es una propiedad del Lead: no vive en la tabla `leads`, solo en `lead_activity_logs`. Valores: `phone`, `whatsapp`, `email`, `in_person`, `video_call`, `sms`, `other` |
 | `created_at` | timestamp | |
 
 **Eventos registrados:**
@@ -190,7 +191,7 @@ Registro inmutable de cada evento significativo en el ciclo de vida del lead.
 | `lead_assigned` | Lead asignado a un agente |
 | `lead_unassigned` | Lead desasignado |
 | `note_added` | Nota agregada |
-| `contact_registered` | Contacto con el prospecto registrado |
+| `contact_registered` | Contacto con el prospecto registrado (incluye `contact_channel` en payload) |
 | `followup_scheduled` | Próxima acción/seguimiento programado |
 | `lead_won` | Lead marcado como ganado |
 | `lead_lost` | Lead marcado como perdido |
@@ -482,7 +483,7 @@ producir la misma respuesta, independientemente del lenguaje que lo implemente.
 | **Status** | Estado del sistema del lead: active, won, lost, archived |
 | **source_system** | Identificador del sistema que originó el lead |
 | **source_channel** | Canal específico dentro del source_system |
-| **external_reference_id** | ID del lead en el sistema externo (para idempotencia) |
+| **external_reference_id** | Identificador opaco del lead en el sistema de origen, usado para garantizar unicidad e idempotencia. Cada sistema externo le da su propio nombre (ZendVacations lo llama `quote_id`; ese mapeo es específico de ese tenant, no una equivalencia general del campo) |
 | **Snapshot** | Copia del valor de un campo externo en el momento de la operación |
 | **assigned_user_provider** | Sistema que gestiona al usuario asignado |
 | **Idempotencia** | Propiedad que garantiza que repetir una operación produce el mismo resultado |
