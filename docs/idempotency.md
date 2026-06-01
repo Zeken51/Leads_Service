@@ -1,6 +1,6 @@
 # Idempotencia — leads-service
 
-> Fase 6.3 — Documento de referencia. Sin implementación todavía.
+> Implementado en fase 6.6. Documento actualizado post-validación.
 
 ---
 
@@ -60,6 +60,34 @@ debe ser **única** cuando `external_reference_id` no es nulo. Si ya existe un l
 Idempotent-Replayed: true     ← presente solo cuando se reproduce una respuesta cacheada
 X-Request-ID: req_a1b2c3d4   ← siempre presente
 ```
+
+---
+
+## Nivel 2: comportamiento con payload equivalente o diferente
+
+**Pregunta frecuente:** Si llegan dos peticiones con la misma combinación `(tenant_id, source_system, external_reference_id)` pero con distinto `Idempotency-Key`, ¿se retorna replay o 409?
+
+**Respuesta: siempre 409.** El nivel 2 es una restricción de negocio, no de red. No importa si el payload es idéntico o diferente — la existencia del duplicado semántico siempre produce 409 con el `lead_id` existente. Solo el nivel 1 (`Idempotency-Key`) habilita replay.
+
+```
+Caso: clave A crea lead con external_reference_id=ZV-001
+Caso: clave B llega con external_reference_id=ZV-001 (misma clave B, nueva)
+→ Nivel 1: pasa (clave B no existe)
+→ Nivel 2: detecta ZV-001 existente → 409
+```
+
+Para recibir un replay del lead ya creado, el cliente debe reenviar con la **misma `Idempotency-Key`** que usó originalmente.
+
+## Interacción entre nivel 1 y nivel 2
+
+Los dos mecanismos se aplican **en secuencia**, no en competencia:
+
+1. Si hay `Idempotency-Key` y la clave ya existe → **replay nivel 1** (200, sin consultar datos)
+2. Si no hay clave activa → **verificación nivel 2** por `external_reference_id`
+3. Si nivel 2 encuentra duplicado → **409**
+4. Si ninguno encuentra duplicado → **crear lead** (201)
+
+Esto significa: el nivel 1 es más específico (clave exacta), el nivel 2 es más amplio (cualquier petición con ese identificador).
 
 ---
 

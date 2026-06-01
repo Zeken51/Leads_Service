@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\LeadController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -32,9 +33,11 @@ Route::prefix('v1')->group(function () {
             ->middleware(['auth:sanctum']);
     });
 
-    // Rutas protegidas (leads, pipeline, notas, etc. — se agregan en fases 6.6/6.7)
+    // Rutas protegidas — auth:sanctum + tenant context
     Route::middleware(['auth:sanctum', 'set.tenant.context'])->group(function () {
-        // Fase 6.6: POST /leads, GET /leads, etc.
+        // Leads
+        Route::post('leads', [LeadController::class, 'store']);
+        // Fase 6.7+: GET /leads, GET /leads/{id}, PATCH /leads/{id}, etc.
     });
 
 });

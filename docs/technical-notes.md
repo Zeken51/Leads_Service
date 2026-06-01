@@ -256,15 +256,31 @@ Si un `User` tiene `tenant_id = null` y obtiene un token, `SetTenantContext` ret
 
 Se agregó `tenant_id` nullable a la tabla `users` para que los agentes del panel puedan pertenecer a un tenant y obtener tokens API con contexto de tenant. Es nullable para no romper usuarios existentes de Breeze.
 
-## Siguientes pasos inmediatos (fase 6.6)
+### 33. Idempotencia implementada en dos niveles en `POST /api/v1/leads` *(fase 6.6)*
 
-1. Crear middleware `IdempotencyMiddleware`
-2. Crear rate limiting por tenant
-3. Implementar `GET /api/v1/leads` con filtros y paginación
-4. Implementar `POST /api/v1/leads` con idempotencia (2 niveles)
-5. Implementar `GET /api/v1/leads/{id}`
-6. Implementar `PATCH /api/v1/leads/{id}` y `DELETE`
-7. Crear API Resources para respuestas consistentes
-8. Form Requests con validación
-9. Feature tests de endpoints
-10. Seeders con dos tenants, pipeline stages y leads de prueba
+Nivel 1 (header): `IdempotencyService::findActiveByKey()` busca en `idempotency_keys` por `(idempotency_key, tenant_id)` con `expires_at > now()`. Si existe y no expiró → replay con `idempotent_replay: true` en data y HTTP 200.
+
+Nivel 2 (datos): query explícita en `leads` por `(tenant_id, source_system, external_reference_id)` antes de crear. Si existe → 409. En el raro caso de race condition, el índice único de MySQL captura la colisión con `UniqueConstraintViolationException`.
+
+Los registros de `idempotency_keys` se guardan DESPUÉS de crear el lead (fuera de la transacción del lead). Si hay race condition en la clave, se captura y se retorna el replay del registro ya guardado.
+
+### 34. `source_system` y `source_channel` — resolución desde contexto o payload *(fase 6.6)*
+
+1. Si el payload incluye `source_system` y el cliente tiene `source_system` fijo (TenantApiClient) → deben coincidir, si no → 422
+2. Si el payload no incluye `source_system` → se usa el del cliente (TenantApiClient)
+3. Si ni el payload ni el cliente tienen `source_system` → 422 (User sin fuente definida)
+
+Esto permite que ZendVacations envíe requests sin incluir `source_system` cada vez (viene del token), pero no puede crear leads con `source_system` diferente al suyo.
+
+### 35. `LeadResource` con `idempotent_replay` como parámetro del constructor *(fase 6.6)*
+
+Se eligió pasar `$idempotentReplay: bool` al constructor en lugar de usar `additional()` de JsonResource para mantener el flag DENTRO del objeto `data`, consistente con los contratos documentados.
+
+## Siguientes pasos inmediatos (fase 6.7)
+
+1. Implementar `GET /api/v1/leads` con filtros y paginación
+2. Implementar `GET /api/v1/leads/{id}` con notas + actividad reciente
+3. Implementar `PATCH /api/v1/leads/{id}` (campos editables)
+4. Implementar `DELETE /api/v1/leads/{id}` (archivado)
+5. Crear seeders con dos tenants, pipeline stages y leads de prueba
+6. Rate limiting por tenant
